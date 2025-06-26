@@ -13,19 +13,23 @@ def format_to_e164(phone):
         return phone
     return None
 
-def validate_with_twilio(phone, sid, token):
+def lookup_status(phone, sid, token):
     if not phone:
-        return ""
+        return ("", "", "")
     url = f"https://lookups.twilio.com/v2/PhoneNumbers/{phone}?type=carrier"
     try:
         response = requests.get(url, auth=(sid, token))
         if response.status_code == 200:
-            return phone.replace("+1", "")  # Return cleaned US number
+            data = response.json()
+            carrier = data.get("carrier", {}).get("name", "")
+            phone_type = data.get("carrier", {}).get("type", "")
+            ported = data.get("carrier", {}).get("ported", "")
+            return (phone.replace("+1", ""), phone_type, carrier, ported)
     except:
         pass
-    return ""  # Blank out invalid or failed
+    return ("", "", "", "")
 
-st.title("📞 Phone Number Cleaner with Twilio Lookup")
+st.title("📞 Phone Number Cleaner & Status Lookup with Twilio")
 
 uploaded_file = st.file_uploader("Upload CSV file with phone numbers", type=["csv"])
 account_sid = st.text_input("🔐 Twilio Account SID")
@@ -35,7 +39,7 @@ if uploaded_file and account_sid and auth_token:
     df = pd.read_csv(uploaded_file)
 
     # Identify all phone-like columns
-    phone_cols = [col for col in df.columns if 'phone' in col.lower() or 'mobile' in col.lower() or 'cell' in col.lower()]
+    phone_cols = [col for col in df.columns if 'phone' in col.lower()]
 
     if not phone_cols:
         st.error("No phone-related columns found in your file.")
@@ -43,17 +47,24 @@ if uploaded_file and account_sid and auth_token:
 
     st.success(f"Found phone columns: {phone_cols}")
 
+    results = []
     for col in phone_cols:
         df[col] = df[col].astype(str).apply(format_to_e164)
-        cleaned = []
         with st.spinner(f"Validating column '{col}' via Twilio..."):
             for phone in df[col]:
-                cleaned.append(validate_with_twilio(phone, account_sid, auth_token))
+                formatted, phone_type, carrier, ported = lookup_status(phone, account_sid, auth_token)
+                results.append({
+                    "Original Column": col,
+                    "Phone": formatted,
+                    "Phone Type": phone_type,
+                    "Carrier": carrier,
+                    "Ported": ported
+                })
                 sleep(0.5)
-        df[col] = cleaned
 
-    st.success("Phone numbers cleaned successfully!")
-    st.dataframe(df.head())
+    result_df = pd.DataFrame(results)
+    st.write("📋 Detailed Phone Status Results:")
+    st.dataframe(result_df.head(50))
 
-    csv = df.to_csv(index=False)
-    st.download_button("📥 Download Cleaned CSV", csv, "Twilio_Cleaned_Phone_List.csv", "text/csv")
+    csv = result_df.to_csv(index=False)
+    st.download_button("📥 Download Phone Status Report", csv, "Twilio_Phone_Status_Report.csv", "text/csv")
