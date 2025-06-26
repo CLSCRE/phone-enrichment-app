@@ -14,69 +14,56 @@ def format_to_e164(phone):
     return None
 
 def lookup_status(phone, sid, token):
-    if not phone:
-        return ("", "", "", "")
+    if not phone or not phone.startswith("+"):
+        return ("", "", "", "Invalid")
     url = f"https://lookups.twilio.com/v2/PhoneNumbers/{phone}?type=carrier"
     try:
         response = requests.get(url, auth=(sid, token))
         if response.status_code == 200:
             data = response.json()
-            carrier = data.get("carrier", {}).get("name", "")
             phone_type = data.get("carrier", {}).get("type", "")
+            carrier = data.get("carrier", {}).get("name", "")
             ported = data.get("carrier", {}).get("ported", "")
-            return (phone.replace("+1", ""), phone_type, carrier, ported)
+            return (phone_type, carrier, ported, "Valid")
     except:
         pass
-    return ("", "", "", "")
-    url = f"https://lookups.twilio.com/v2/PhoneNumbers/{phone}?type=carrier"
-    try:
-        response = requests.get(url, auth=(sid, token))
-        if response.status_code == 200:
-            data = response.json()
-            carrier = data.get("carrier", {}).get("name", "")
-            phone_type = data.get("carrier", {}).get("type", "")
-            ported = data.get("carrier", {}).get("ported", "")
-            return (phone.replace("+1", ""), phone_type, carrier, ported)
-    except:
-        pass
-    return ("", "", "", "")
+    return ("", "", "", "Error")
 
-st.title("📞 Phone Number Cleaner & Status Lookup with Twilio")
+st.title("📞 Phone Number Cleaner & Twilio Enricher")
 
-uploaded_file = st.file_uploader("Upload CSV file with phone numbers", type=["csv"])
+uploaded_file = st.file_uploader("Upload Excel File", type=["xlsx"])
 account_sid = st.text_input("🔐 Twilio Account SID")
 auth_token = st.text_input("🔑 Twilio Auth Token", type="password")
 
 if uploaded_file and account_sid and auth_token:
-    df = pd.read_csv(uploaded_file)
-
-    # Identify all phone-like columns
+    df = pd.read_excel(uploaded_file)
     phone_cols = [col for col in df.columns if 'phone' in col.lower()]
-
     if not phone_cols:
-        st.error("No phone-related columns found in your file.")
+        st.error("No columns with 'phone' found.")
         st.stop()
 
     st.success(f"Found phone columns: {phone_cols}")
 
-    results = []
+    cleaned_df = df.copy()
+    all_phones = pd.Series(dtype=str)
+
     for col in phone_cols:
-        df[col] = df[col].astype(str).apply(format_to_e164)
-        with st.spinner(f"Validating column '{col}' via Twilio..."):
-            for phone in df[col]:
-                formatted, phone_type, carrier, ported = lookup_status(phone, account_sid, auth_token)
-                results.append({
-                    "Original Column": col,
-                    "Phone": formatted,
-                    "Phone Type": phone_type,
-                    "Carrier": carrier,
-                    "Ported": ported
-                })
-                sleep(0.5)
+        cleaned_df[col] = cleaned_df[col].astype(str).apply(format_to_e164)
+        all_phones = pd.concat([all_phones, cleaned_df[col]], ignore_index=True)
 
-    result_df = pd.DataFrame(results)
-    st.write("📋 Detailed Phone Status Results:")
-    st.dataframe(result_df.head(50))
+    all_phones = all_phones.dropna().drop_duplicates().reset_index(drop=True)
 
-    csv = result_df.to_csv(index=False)
-    st.download_button("📥 Download Phone Status Report", csv, "Twilio_Phone_Status_Report.csv", "text/csv")
+    enriched_df = pd.DataFrame({'Phone': all_phones})
+    enriched_df[['Phone Type', 'Carrier', 'Ported', 'Status']] = enriched_df['Phone'].apply(
+        lambda x: pd.Series(lookup_status(x, account_sid, auth_token))
+    )
+
+    st.write("✅ Twilio Enriched Preview")
+    st.dataframe(enriched_df.head(25))
+
+    from io import BytesIO
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        cleaned_df.to_excel(writer, index=False, sheet_name='Cleaned Phone Sheet')
+        enriched_df.to_excel(writer, index=False, sheet_name='Twilio Enriched')
+    st.download_button("📥 Download Results Excel", output.getvalue(), file_name="twilio_enriched_output.xlsx")
