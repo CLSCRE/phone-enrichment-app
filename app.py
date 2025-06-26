@@ -18,22 +18,22 @@ uploaded_file = st.file_uploader("Upload Excel File with Phone Numbers", type=["
 if uploaded_file:
     df = pd.read_excel(uploaded_file)
 
-    # Find all phone-related columns (case-insensitive match)
+    # Detect all phone-related columns
     phone_cols = [col for col in df.columns if 'phone' in col.lower() or 'cell' in col.lower() or 'mobile' in col.lower()]
-    
+
     if not phone_cols:
         st.warning("No phone-related columns found.")
     else:
-        st.write(f"Found phone columns: {phone_cols}")
+        st.success(f"Found phone columns: {phone_cols}")
 
-        # Combine all phone number columns into one Series
-        phone_series = pd.concat([df[col] for col in phone_cols], ignore_index=True)
+        # Combine all phone-related columns into one Series
+        phone_list = [df[col] for col in phone_cols]
+        phone_series = pd.concat(phone_list, ignore_index=True)
 
-        # Drop blanks, format to E.164, and drop invalids
+        # Clean, format, and deduplicate
         phone_series = phone_series.dropna().astype(str)
         phone_series = phone_series.map(format_to_e164).dropna().drop_duplicates().reset_index(drop=True)
 
-        # Final DataFrame
         formatted_df = pd.DataFrame({'E164 Phone': phone_series})
 
         st.write("📋 Preview of formatted phone numbers:", formatted_df.head())
