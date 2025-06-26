@@ -13,63 +13,46 @@ def format_to_e164(phone):
         return phone
     return None
 
-def twilio_lookup(phone, sid, token):
+def validate_with_twilio(phone, sid, token):
+    if not phone:
+        return ""
+    url = f"https://lookups.twilio.com/v2/PhoneNumbers/{phone}?type=carrier"
     try:
-        url = f"https://lookups.twilio.com/v2/PhoneNumbers/{phone}?type=carrier"
         response = requests.get(url, auth=(sid, token))
         if response.status_code == 200:
-            data = response.json()
-            return {
-                "Phone": phone,
-                "Phone Type": data.get("carrier", {}).get("type"),
-                "Carrier": data.get("carrier", {}).get("name"),
-                "Ported": data.get("carrier", {}).get("ported"),
-            }
-    except Exception:
+            return phone.replace("+1", "")  # Return cleaned US number
+    except:
         pass
-    return {
-        "Phone": phone,
-        "Phone Type": None,
-        "Carrier": None,
-        "Ported": None,
-    }
+    return ""  # Blank out invalid or failed
 
-st.title("📞 Phone Number Enrichment with Twilio Lookup")
+st.title("📞 Phone Number Cleaner with Twilio Lookup")
 
-# Step 1: Upload Excel
-uploaded_file = st.file_uploader("Upload Excel File with Phone Numbers", type=["xlsx"])
+uploaded_file = st.file_uploader("Upload CSV file with phone numbers", type=["csv"])
+account_sid = st.text_input("🔐 Twilio Account SID")
+auth_token = st.text_input("🔑 Twilio Auth Token", type="password")
 
-# Step 2: Enter Twilio credentials
-sid = st.text_input("🔐 Twilio Account SID")
-token = st.text_input("🔑 Twilio Auth Token", type="password")
+if uploaded_file and account_sid and auth_token:
+    df = pd.read_csv(uploaded_file)
 
-if uploaded_file and sid and token:
-    df = pd.read_excel(uploaded_file)
-
-    # Step 3: Detect phone columns
-    phone_cols = [col for col in df.columns if 'phone' in col.lower() or 'cell' in col.lower() or 'mobile' in col.lower()]
-    if not phone_cols:
-        st.warning("No phone-related columns found.")
+    if "Phone" not in df.columns:
+        st.error("Your file must contain a 'Phone' column.")
         st.stop()
 
-    st.success(f"Found phone columns: {phone_cols}")
+    # Format to E.164
+    df["Formatted"] = df["Phone"].astype(str).apply(format_to_e164)
 
-    # Step 4: Combine and format
-    phone_series = pd.concat([df[col] for col in phone_cols], ignore_index=True)
-    phone_series = phone_series.dropna().astype(str)
-    phone_series = phone_series.map(format_to_e164).dropna().drop_duplicates().reset_index(drop=True)
+    # Validate with Twilio and blank out invalid ones
+    cleaned = []
+    with st.spinner("Validating phone numbers via Twilio..."):
+        for phone in df["Formatted"]:
+            cleaned.append(validate_with_twilio(phone, account_sid, auth_token))
+            sleep(0.5)  # To respect Twilio rate limits
 
-    st.write("Preview of formatted numbers:", phone_series.head())
+    df["Phone"] = cleaned
+    df.drop(columns=["Formatted"], inplace=True)
 
-    # Step 5: Run Twilio Lookup
-    results = []
-    with st.spinner("🔍 Enriching phone numbers with Twilio..."):
-        for phone in phone_series:
-            results.append(twilio_lookup(phone, sid, token))
-            sleep(0.5)  # To respect Twilio's rate limits
+    st.success("Phone numbers cleaned successfully!")
+    st.dataframe(df.head())
 
-    enriched_df = pd.DataFrame(results)
-    st.write("✅ Enrichment Complete. Preview:", enriched_df.head())
-
-    csv = enriched_df.to_csv(index=False)
-    st.download_button("📥 Download Enriched CSV", csv, "Twilio_Enriched_Phone_List.csv", "text/csv")
+    csv = df.to_csv(index=False)
+    st.download_button("📥 Download Cleaned CSV", csv, "Twilio_Cleaned_Phone_List.csv", "text/csv")
