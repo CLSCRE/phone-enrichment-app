@@ -1,86 +1,42 @@
-import streamlit as st
 import pandas as pd
-import requests
-import time
-from PIL import Image
+import streamlit as st
 
-API_KEY = st.secrets["NUMVERIFY_API_KEY"]
-BASE_URL = 'http://apilayer.net/api/validate'
+def format_to_e164(phone):
+    phone = ''.join(filter(str.isdigit, str(phone)))
+    if len(phone) == 10:
+        return "+1" + phone
+    elif len(phone) == 11 and phone.startswith("1"):
+        return "+" + phone
+    elif phone.startswith("+") and len(phone) > 10:
+        return phone
+    return None
 
-def normalize_phone_number(phone):
-    digits = ''.join(filter(str.isdigit, str(phone)))
-    return digits if 10 <= len(digits) <= 11 else None
+st.title("Multi-Column Phone Extractor & Formatter for Twilio Lookup")
 
-def enrich_number(phone):
-    try:
-        response = requests.get(BASE_URL, params={
-            'access_key': API_KEY,
-            'number': phone,
-            'country_code': 'US',
-            'format': 1
-        })
-        data = response.json()
-        line_type = data.get('line_type')
-        valid = data.get('valid')
-        working_score = "Low"
-        if valid:
-            if line_type == "mobile":
-                working_score = "High"
-            elif line_type in ["landline", "voip"]:
-                working_score = "Medium"
-        return {
-            'Phone': phone,
-            'Valid': valid,
-            'Line Type': line_type,
-            'Carrier': data.get('carrier'),
-            'Location': data.get('location'),
-            'International Format': data.get('international_format'),
-            'Working Score': working_score
-        }
-    except Exception as e:
-        return {'Phone': phone, 'Error': str(e)}
-
-# Branding header with logo
-st.set_page_config(page_title="CLS CRE Phone Enrichment", layout="wide")
-logo_path = "https://clscre.com/wp-content/uploads/2023/05/CLS-CRE_logo_white.png"  # Update to actual logo URL
-st.image(logo_path, width=200)
-
-st.title("📞 Phone Number Enrichment Tool")
-st.caption("Upload a spreadsheet of phone numbers to identify type and working probability using Numverify.")
-
-uploaded_file = st.file_uploader("Upload Excel or CSV File", type=["xlsx", "xls", "csv"])
+uploaded_file = st.file_uploader("Upload Excel File with Phone Numbers", type=["xlsx"])
 
 if uploaded_file:
-    if uploaded_file.name.endswith(".csv"):
-        df = pd.read_csv(uploaded_file)
+    df = pd.read_excel(uploaded_file)
+
+    # Find all phone-related columns (case-insensitive match)
+    phone_cols = [col for col in df.columns if 'phone' in col.lower() or 'cell' in col.lower() or 'mobile' in col.lower()]
+    
+    if not phone_cols:
+        st.warning("No phone-related columns found.")
     else:
-        df = pd.read_excel(uploaded_file)
+        st.write(f"Found phone columns: {phone_cols}")
 
-    phone_columns = [col for col in df.columns if 'phone' in col.lower()]
+        # Combine all phone number columns into one Series
+        phone_series = pd.concat([df[col] for col in phone_cols], ignore_index=True)
 
-    if not phone_columns:
-        st.warning("No phone number columns detected.")
-    else:
-        st.success(f"Found phone columns: {', '.join(phone_columns)}")
-        raw_phones = df[phone_columns].values.flatten()
-        normalized = pd.Series(raw_phones).dropna().map(normalize_phone_number).dropna().drop_duplicates()
+        # Drop blanks, format to E.164, and drop invalids
+        phone_series = phone_series.dropna().astype(str)
+        phone_series = phone_series.map(format_to_e164).dropna().drop_duplicates().reset_index(drop=True)
 
-        st.write(f"Processing {len(normalized)} unique phone numbers...")
+        # Final DataFrame
+        formatted_df = pd.DataFrame({'E164 Phone': phone_series})
 
-        enriched_data = []
-        progress = st.progress(0)
-        for i, phone in enumerate(normalized):
-            enriched_data.append(enrich_number(phone))
-            progress.progress((i + 1) / len(normalized))
-            time.sleep(1)
+        st.write("📋 Preview of formatted phone numbers:", formatted_df.head())
 
-        result_df = pd.DataFrame(enriched_data)
-        st.dataframe(result_df)
-
-        csv = result_df.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="📥 Download Enriched Results as CSV",
-            data=csv,
-            file_name="enriched_phone_numbers.csv",
-            mime='text/csv'
-        )
+        csv = formatted_df.to_csv(index=False)
+        st.download_button("📥 Download CSV for Twilio", csv, "Formatted_Phone_List_For_Twilio.csv", "text/csv")
