@@ -34,22 +34,23 @@ auth_token = st.text_input("🔑 Twilio Auth Token", type="password")
 if uploaded_file and account_sid and auth_token:
     df = pd.read_csv(uploaded_file)
 
-    if "Phone" not in df.columns:
-        st.error("Your file must contain a 'Phone' column.")
+    # Identify all phone-like columns
+    phone_cols = [col for col in df.columns if 'phone' in col.lower() or 'mobile' in col.lower() or 'cell' in col.lower()]
+
+    if not phone_cols:
+        st.error("No phone-related columns found in your file.")
         st.stop()
 
-    # Format to E.164
-    df["Formatted"] = df["Phone"].astype(str).apply(format_to_e164)
+    st.success(f"Found phone columns: {phone_cols}")
 
-    # Validate with Twilio and blank out invalid ones
-    cleaned = []
-    with st.spinner("Validating phone numbers via Twilio..."):
-        for phone in df["Formatted"]:
-            cleaned.append(validate_with_twilio(phone, account_sid, auth_token))
-            sleep(0.5)  # To respect Twilio rate limits
-
-    df["Phone"] = cleaned
-    df.drop(columns=["Formatted"], inplace=True)
+    for col in phone_cols:
+        df[col] = df[col].astype(str).apply(format_to_e164)
+        cleaned = []
+        with st.spinner(f"Validating column '{col}' via Twilio..."):
+            for phone in df[col]:
+                cleaned.append(validate_with_twilio(phone, account_sid, auth_token))
+                sleep(0.5)
+        df[col] = cleaned
 
     st.success("Phone numbers cleaned successfully!")
     st.dataframe(df.head())
