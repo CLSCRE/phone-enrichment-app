@@ -15,7 +15,19 @@ def format_to_e164(phone):
 
 def lookup_status(phone, sid, token):
     if not phone:
-        return ("", "", "")
+        return ("", "", "", "")
+    url = f"https://lookups.twilio.com/v2/PhoneNumbers/{phone}?type=carrier"
+    try:
+        response = requests.get(url, auth=(sid, token))
+        if response.status_code == 200:
+            data = response.json()
+            carrier = data.get("carrier", {}).get("name", "")
+            phone_type = data.get("carrier", {}).get("type", "")
+            ported = data.get("carrier", {}).get("ported", "")
+            return (phone.replace("+1", ""), phone_type, carrier, ported)
+    except:
+        pass
+    return ("", "", "", "")
     url = f"https://lookups.twilio.com/v2/PhoneNumbers/{phone}?type=carrier"
     try:
         response = requests.get(url, auth=(sid, token))
