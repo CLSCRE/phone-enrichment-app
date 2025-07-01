@@ -124,6 +124,7 @@ elif auth_status:
             filtered_df = df.copy()
 
             # Save to Excel with formatting
+            
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
                 df.to_excel(writer, index=False, sheet_name="Original")
@@ -131,33 +132,16 @@ elif auth_status:
                 result_df.to_excel(writer, index=False, sheet_name="Cleaned")
 
                 # Apply green font to mobile rows in Original
-                                workbook = writer.book
-                                sheet = workbook["Original"]
-                for i, phone in enumerate(filtered_df[phone_columns[0]].astype(str), start=2):
-                                        clean_phone = str(phone).strip().replace("-", "").replace("(", "").replace(")", "").replace(" ", "")
-                                        match = result_df[result_df["Phone"] == clean_phone]
-                                        if not match.empty and match.iloc[0]["Line Type"] == "mobile":
-                                                for cell in sheet[i]:
-                                                        cell.font = Font(color="008000")  # Green
-
+                workbook = writer.book
+                sheet = workbook["Original"]
+                for i, phone in enumerate(df[phone_columns[0]].astype(str), start=2):
+                    clean_phone = str(phone).strip().replace("-", "").replace("(", "").replace(")", "").replace(" ", "")
+                    match = result_df[result_df["Phone"] == clean_phone]
+                    if not match.empty and match.iloc[0]["Line Type"] == "mobile":
+                        for cell in sheet[i]:
+                            cell.font = Font(color="008000")
             output.seek(0)
-            timestamp = pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
-            upload_record = pd.DataFrame([{
-                "Timestamp": timestamp,
-                "Username": username,
-                "Filename": uploaded_file.name,
-                "Phones Scanned": len(normalized),
-                "Valid": (result_df["Valid"] == True).sum(),
-                "Mobile": (result_df["Line Type"] == "mobile").sum()
-            }])
-            try:
-                existing = pd.read_csv("upload_history.csv")
-                upload_record = pd.concat([existing, upload_record], ignore_index=True)
-            except:
-                pass
-            upload_record.to_csv("upload_history.csv", index=False)
-
-            st.download_button(
+st.download_button(
                 label="📥 Download Excel with Cleaned Results (Sheet 2)",
                 data=output,
                 file_name="phone_enrichment_output.xlsx",
