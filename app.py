@@ -105,6 +105,7 @@ elif auth_status:
             raw_phones = df[phone_columns].values.flatten()
             normalized = pd.Series(raw_phones).dropna().map(normalize_phone_number).dropna().drop_duplicates()
 
+            st.write(f"Estimated valid phone numbers to scan: {len(normalized)}")
             enriched_data = []
             progress = st.progress(0)
             for i, phone in enumerate(normalized):
@@ -117,7 +118,7 @@ elif auth_status:
 
             # Filter out invalid numbers from original
             valid_phones = result_df[result_df["Valid"] == True]["Phone"].astype(str)
-            filtered_df = df[df[phone_columns[0]].astype(str).str.replace(r'\D', '', regex=True).isin(valid_phones)]
+            filtered_df = df[df[phone_columns[0]].astype(str).str.replace(r'\D', '', regex=True).isin(valid_phones)].copy()
 
             # Save to Excel with formatting
             output = io.BytesIO()
