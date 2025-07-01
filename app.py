@@ -14,7 +14,7 @@ credentials:
     trevor@clscre.com:
       email: trevor@clscre.com
       name: Trevor Damyan
-      password: '$2b$12$hsm4K8BPvOHDd2YTXAgKZO4KMC9Ia2oZ8DWE3U4Vf49lXN5kk/IJq'
+      password: '$2b$12$thrJtvf2t2gwuTwgjWqMDetotIh6WoVqQjhc9PQADuqzZYKu1sV12'
 
 cookie:
   name: clscre_app
