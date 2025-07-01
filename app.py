@@ -42,11 +42,13 @@ st.sidebar.markdown("### 🔐 Debug Info")
 st.sidebar.write("Auth Status (from session):", st.session_state.get("authentication_status"))
 st.sidebar.write("Session State:", dict(st.session_state))
 
-if st.session_state.get("authentication_status") is False:
+auth_status = st.session_state.get("authentication_status")
+
+if auth_status is False:
     st.error("Incorrect username or password")
-elif st.session_state.get("authentication_status") is None:
+elif auth_status is None:
     st.warning("Please enter your username and password")
-elif st.session_state.get("authentication_status"):
+elif auth_status:
     authenticator.logout("Logout", "sidebar")
     username = st.session_state.get("username", "Unknown User")
     st.success(f"Welcome, {username}!")
