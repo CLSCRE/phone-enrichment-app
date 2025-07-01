@@ -35,18 +35,18 @@ authenticator = stauth.Authenticate(
     config['cookie']['expiry_days']
 )
 
-authentication_status = authenticator.login()
+authenticator.login()
 
-# Debug section to show login state
+# Debug info
 st.sidebar.markdown("### 🔐 Debug Info")
-st.sidebar.write("Auth Status:", authentication_status)
+st.sidebar.write("Auth Status (from session):", st.session_state.get("authentication_status"))
 st.sidebar.write("Session State:", dict(st.session_state))
 
-if authentication_status is False:
+if st.session_state.get("authentication_status") is False:
     st.error("Incorrect username or password")
-elif authentication_status is None:
+elif st.session_state.get("authentication_status") is None:
     st.warning("Please enter your username and password")
-elif authentication_status:
+elif st.session_state.get("authentication_status"):
     authenticator.logout("Logout", "sidebar")
     username = st.session_state.get("username", "Unknown User")
     st.success(f"Welcome, {username}!")
