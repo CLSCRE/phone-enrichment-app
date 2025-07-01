@@ -1,69 +1,109 @@
-import pandas as pd
 import streamlit as st
+import pandas as pd
 import requests
-from time import sleep
+import time
+from PIL import Image
+import streamlit_authenticator as stauth
 
-def format_to_e164(phone):
-    phone = ''.join(filter(str.isdigit, str(phone)))
-    if len(phone) == 10:
-        return "+1" + phone
-    elif len(phone) == 11 and phone.startswith("1"):
-        return "+" + phone
-    elif phone.startswith("+") and len(phone) > 10:
-        return phone
-    return None
+# --- LOGIN SETUP ---
+names = ["Trevor Damyan"]
+usernames = ["trevor@clscre.com"]
+passwords = ["Clscre@123456"]  # You can hash this in production
 
-def lookup_status(phone, sid, token):
-    if not phone or not phone.startswith("+"):
-        return ("", "", "", "Invalid")
-    url = f"https://lookups.twilio.com/v2/PhoneNumbers/{phone}?type=carrier"
-    try:
-        response = requests.get(url, auth=(sid, token))
-        if response.status_code == 200:
+hashed_passwords = stauth.Hasher(passwords).generate()
+authenticator = stauth.Authenticate(
+    names,
+    usernames,
+    hashed_passwords,
+    "clscre_app", "clscre_token", cookie_expiry_days=1
+)
+
+name, authentication_status, username = authenticator.login("Login", "main")
+
+if authentication_status is False:
+    st.error("Incorrect username or password")
+elif authentication_status is None:
+    st.warning("Please enter your username and password")
+elif authentication_status:
+    authenticator.logout("Logout", "sidebar")
+
+    # --- MAIN APP ---
+    API_KEY = st.secrets["NUMVERIFY_API_KEY"]
+    BASE_URL = 'http://apilayer.net/api/validate'
+
+    def normalize_phone_number(phone):
+        digits = ''.join(filter(str.isdigit, str(phone)))
+        return digits if 10 <= len(digits) <= 11 else None
+
+    def enrich_number(phone):
+        try:
+            response = requests.get(BASE_URL, params={
+                'access_key': API_KEY,
+                'number': phone,
+                'country_code': 'US',
+                'format': 1
+            })
             data = response.json()
-            phone_type = data.get("carrier", {}).get("type", "")
-            carrier = data.get("carrier", {}).get("name", "")
-            ported = data.get("carrier", {}).get("ported", "")
-            return (phone_type, carrier, ported, "Valid")
-    except:
-        pass
-    return ("", "", "", "Error")
+            line_type = data.get('line_type')
+            valid = data.get('valid')
+            working_score = "Low"
+            if valid:
+                if line_type == "mobile":
+                    working_score = "High"
+                elif line_type in ["landline", "voip"]:
+                    working_score = "Medium"
+            return {
+                'Phone': phone,
+                'Valid': valid,
+                'Line Type': line_type,
+                'Carrier': data.get('carrier'),
+                'Location': data.get('location'),
+                'International Format': data.get('international_format'),
+                'Working Score': working_score
+            }
+        except Exception as e:
+            return {'Phone': phone, 'Error': str(e)}
 
-st.title("📞 Phone Number Cleaner & Twilio Enricher")
+    st.set_page_config(page_title="CLS CRE Phone Enrichment", layout="wide")
+    logo_path = "https://clscre.com/wp-content/uploads/2023/05/CLS-CRE_logo_white.png"
+    st.image(logo_path, width=200)
 
-uploaded_file = st.file_uploader("Upload Excel File", type=["xlsx"])
-account_sid = st.text_input("🔐 Twilio Account SID")
-auth_token = st.text_input("🔑 Twilio Auth Token", type="password")
+    st.title("📞 Phone Number Enrichment Tool")
+    st.caption("Upload a spreadsheet of phone numbers to identify type and working probability using Numverify.")
 
-if uploaded_file and account_sid and auth_token:
-    df = pd.read_excel(uploaded_file)
-    phone_cols = [col for col in df.columns if 'phone' in col.lower()]
-    if not phone_cols:
-        st.error("No columns with 'phone' found.")
-        st.stop()
+    uploaded_file = st.file_uploader("Upload Excel or CSV File", type=["xlsx", "xls", "csv"])
 
-    st.success(f"Found phone columns: {phone_cols}")
+    if uploaded_file:
+        if uploaded_file.name.endswith(".csv"):
+            df = pd.read_csv(uploaded_file)
+        else:
+            df = pd.read_excel(uploaded_file)
 
-    cleaned_df = df.copy()
-    all_phones = pd.Series(dtype=str)
+        phone_columns = [col for col in df.columns if 'phone' in col.lower()]
 
-    for col in phone_cols:
-        cleaned_df[col] = cleaned_df[col].astype(str).apply(format_to_e164)
-        all_phones = pd.concat([all_phones, cleaned_df[col]], ignore_index=True)
+        if not phone_columns:
+            st.warning("No phone number columns detected.")
+        else:
+            st.success(f"Found phone columns: {', '.join(phone_columns)}")
+            raw_phones = df[phone_columns].values.flatten()
+            normalized = pd.Series(raw_phones).dropna().map(normalize_phone_number).dropna().drop_duplicates()
 
-    all_phones = all_phones.dropna().drop_duplicates().reset_index(drop=True)
+            st.write(f"Processing {len(normalized)} unique phone numbers...")
 
-    enriched_df = pd.DataFrame({'Phone': all_phones})
-    enriched_df[['Phone Type', 'Carrier', 'Ported', 'Status']] = enriched_df['Phone'].apply(
-        lambda x: pd.Series(lookup_status(x, account_sid, auth_token))
-    )
+            enriched_data = []
+            progress = st.progress(0)
+            for i, phone in enumerate(normalized):
+                enriched_data.append(enrich_number(phone))
+                progress.progress((i + 1) / len(normalized))
+                time.sleep(1)
 
-    st.write("✅ Twilio Enriched Preview")
-    st.dataframe(enriched_df.head(25))
+            result_df = pd.DataFrame(enriched_data)
+            st.dataframe(result_df)
 
-    from io import BytesIO
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        cleaned_df.to_excel(writer, index=False, sheet_name='Cleaned Phone Sheet')
-        enriched_df.to_excel(writer, index=False, sheet_name='Twilio Enriched')
-    st.download_button("📥 Download Results Excel", output.getvalue(), file_name="twilio_enriched_output.xlsx")
+            csv = result_df.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📥 Download Enriched Results as CSV",
+                data=csv,
+                file_name="enriched_phone_numbers.csv",
+                mime='text/csv'
+            )
