@@ -128,17 +128,17 @@ elif auth_status:
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
                 df.to_excel(writer, index=False, sheet_name="Original")
                 result_df.insert(0, "Original Phone", result_df["Phone"])
-result_df.to_excel(writer, index=False, sheet_name="Cleaned")
+                result_df.to_excel(writer, index=False, sheet_name="Cleaned")
 
                 # Apply green font to mobile rows in Original
-                workbook = writer.book
-                sheet = workbook["Original"]
+                                workbook = writer.book
+                                sheet = workbook["Original"]
                 for i, phone in enumerate(filtered_df[phone_columns[0]].astype(str), start=2):
-                    clean_phone = str(phone).strip().replace("-", "").replace("(", "").replace(")", "").replace(" ", "")
-                    match = result_df[result_df["Phone"] == clean_phone]
-                    if not match.empty and match.iloc[0]["Line Type"] == "mobile":
-                        for cell in sheet[i]:
-                            cell.font = Font(color="008000")  # Green
+                                        clean_phone = str(phone).strip().replace("-", "").replace("(", "").replace(")", "").replace(" ", "")
+                                        match = result_df[result_df["Phone"] == clean_phone]
+                                        if not match.empty and match.iloc[0]["Line Type"] == "mobile":
+                                                for cell in sheet[i]:
+                                                        cell.font = Font(color="008000")  # Green
 
             output.seek(0)
             timestamp = pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
