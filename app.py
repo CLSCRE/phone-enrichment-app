@@ -7,6 +7,11 @@ import streamlit_authenticator as stauth
 import yaml
 from yaml import SafeLoader
 
+# --- SETUP PAGE AND LOGO EARLY ---
+st.set_page_config(page_title="CLS CRE Phone Enrichment", layout="wide")
+logo_path = "https://clscre.com/wp-content/uploads/2023/05/CLS-CRE_logo_white.png"
+st.image(logo_path, width=200)
+
 # --- LOGIN SETUP ---
 config = yaml.safe_load("""
 credentials:
@@ -76,10 +81,6 @@ elif authentication_status:
             }
         except Exception as e:
             return {'Phone': phone, 'Error': str(e)}
-
-    st.set_page_config(page_title="CLS CRE Phone Enrichment", layout="wide")
-    logo_path = "https://clscre.com/wp-content/uploads/2023/05/CLS-CRE_logo_white.png"
-    st.image(logo_path, width=200)
 
     st.title("📞 Phone Number Enrichment Tool")
     st.caption("Upload a spreadsheet of phone numbers to identify type and working probability using Numverify.")
