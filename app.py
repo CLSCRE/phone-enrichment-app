@@ -8,9 +8,10 @@ import streamlit_authenticator as stauth
 # --- LOGIN SETUP ---
 names = ["Trevor Damyan"]
 usernames = ["trevor@clscre.com"]
-passwords = ["Clscre@123456"]  # You can hash this in production
+hashed_passwords = [
+    "$2b$12$hsm4K8BPvOHDd2YTXAgKZO4KMC9Ia2oZ8DWE3U4Vf49lXN5kk/IJq"
+]
 
-hashed_passwords = stauth.Hasher(passwords).generate()
 authenticator = stauth.Authenticate(
     names,
     usernames,
