@@ -46,6 +46,8 @@ elif auth_status is None:
     st.warning("Please enter your username and password")
 elif auth_status:
     authenticator.logout("Logout", "sidebar")
+    st.markdown("---")
+    tabs = st.tabs(["Phone Cleaner", "Upload History"])
     username = st.session_state.get("username", "Unknown User")
     st.success(f"Welcome, {username}!")
 
@@ -88,7 +90,8 @@ elif auth_status:
     st.markdown("#### Phone Number Enrichment Tool")
     st.caption("Upload a spreadsheet of phone numbers to identify type and working probability using Numverify.")
 
-    uploaded_file = st.file_uploader("Upload Excel or CSV File", type=["xlsx", "xls", "csv"])
+    with tabs[0]:
+        uploaded_file = st.file_uploader("Upload Excel or CSV File", type=["xlsx", "xls", "csv"])
 
     if uploaded_file:
         if uploaded_file.name.endswith(".csv"):
@@ -117,26 +120,42 @@ elif auth_status:
             result_df = pd.DataFrame(enriched_data)
 
             # Filter out invalid numbers from original
-            valid_phones = result_df[result_df["Valid"] == True]["Phone"].astype(str)
-            filtered_df = df[df[phone_columns[0]].astype(str).str.replace(r'\D', '', regex=True).isin(valid_phones)].copy()
+            valid_phones = result_df[result_df["Valid"] == True]["Phone"].astype(str).str.replace(r"\D", "", regex=True)
+            filtered_df = df.copy()
 
             # Save to Excel with formatting
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                filtered_df.to_excel(writer, index=False, sheet_name="Original")
+                df.to_excel(writer, index=False, sheet_name="Original")
                 result_df.to_excel(writer, index=False, sheet_name="Cleaned")
 
                 # Apply green font to mobile rows in Original
                 workbook = writer.book
                 sheet = workbook["Original"]
                 for i, phone in enumerate(filtered_df[phone_columns[0]].astype(str), start=2):
-                    clean_phone = ''.join(filter(str.isdigit, str(phone)))
+                    clean_phone = str(phone).strip().replace("-", "").replace("(", "").replace(")", "").replace(" ", "")
                     match = result_df[result_df["Phone"] == clean_phone]
                     if not match.empty and match.iloc[0]["Line Type"] == "mobile":
                         for cell in sheet[i]:
                             cell.font = Font(color="008000")  # Green
 
             output.seek(0)
+            timestamp = pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
+            upload_record = pd.DataFrame([{
+                "Timestamp": timestamp,
+                "Username": username,
+                "Filename": uploaded_file.name,
+                "Phones Scanned": len(normalized),
+                "Valid": (result_df["Valid"] == True).sum(),
+                "Mobile": (result_df["Line Type"] == "mobile").sum()
+            }])
+            try:
+                existing = pd.read_csv("upload_history.csv")
+                upload_record = pd.concat([existing, upload_record], ignore_index=True)
+            except:
+                pass
+            upload_record.to_csv("upload_history.csv", index=False)
+
             st.download_button(
                 label="📥 Download Excel with Cleaned Results (Sheet 2)",
                 data=output,
@@ -144,3 +163,11 @@ elif auth_status:
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
             st.stop()
+
+    with tabs[1]:
+        try:
+            history_df = pd.read_csv("upload_history.csv")
+            history_df = history_df.sort_values("Timestamp", ascending=False)
+            st.dataframe(history_df)
+        except:
+            st.info("No upload history found yet.")
