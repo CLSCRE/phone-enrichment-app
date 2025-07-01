@@ -127,7 +127,8 @@ elif auth_status:
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
                 df.to_excel(writer, index=False, sheet_name="Original")
-                result_df.to_excel(writer, index=False, sheet_name="Cleaned")
+                result_df.insert(0, "Original Phone", result_df["Phone"])
+result_df.to_excel(writer, index=False, sheet_name="Cleaned")
 
                 # Apply green font to mobile rows in Original
                 workbook = writer.book
