@@ -33,7 +33,7 @@ authenticator = stauth.Authenticate(
     config['preauthorized']
 )
 
-name, authentication_status, username = authenticator.login("Login", "main")
+name, authentication_status, username = authenticator.login(location="main")
 
 if authentication_status is False:
     st.error("Incorrect username or password")
