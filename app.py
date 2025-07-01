@@ -11,6 +11,7 @@ from yaml import SafeLoader
 st.set_page_config(page_title="CLS CRE Phone Enrichment", layout="wide")
 logo_path = "https://clscre.com/wp-content/uploads/2023/05/CLS-CRE_logo_white.png"
 st.image(logo_path, width=200)
+st.markdown("### Phone Number Cleaner - Numverify")
 
 # --- LOGIN SETUP ---
 config = yaml.safe_load("""
@@ -36,14 +37,20 @@ authenticator = stauth.Authenticate(
 
 authentication_status = authenticator.login()
 
+# Debug section to show login state
+st.sidebar.markdown("### 🔐 Debug Info")
+st.sidebar.write("Auth Status:", authentication_status)
+st.sidebar.write("Session State:", dict(st.session_state))
+
 if authentication_status is False:
     st.error("Incorrect username or password")
 elif authentication_status is None:
     st.warning("Please enter your username and password")
 elif authentication_status:
     authenticator.logout("Logout", "sidebar")
-    user_info = authenticator.get_user_info()
-    st.success(f"Welcome, {user_info['name']}!")
+    username = st.session_state.get("username", "Unknown User")
+    st.success(f"Welcome, {username}!")
+    st.write("✅ Upload section loaded.")
 
     # --- MAIN APP ---
     API_KEY = st.secrets["NUMVERIFY_API_KEY"]
