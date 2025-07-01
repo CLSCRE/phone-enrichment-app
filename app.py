@@ -140,19 +140,12 @@ elif auth_status:
                     if not match.empty and match.iloc[0]["Line Type"] == "mobile":
                         for cell in sheet[i]:
                             cell.font = Font(color="008000")
+            
             output.seek(0)
-st.download_button(
+            st.download_button(
                 label="📥 Download Excel with Cleaned Results (Sheet 2)",
                 data=output,
                 file_name="phone_enrichment_output.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
             st.stop()
-
-    with tabs[1]:
-        try:
-            history_df = pd.read_csv("upload_history.csv")
-            history_df = history_df.sort_values("Timestamp", ascending=False)
-            st.dataframe(history_df)
-        except:
-            st.info("No upload history found yet.")
