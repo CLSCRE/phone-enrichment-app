@@ -8,28 +8,29 @@ import yaml
 from yaml import SafeLoader
 
 # --- LOGIN SETUP ---
-config = {
-    'credentials': {
-        'usernames': {
-            'trevor@clscre.com': {
-                'name': 'Trevor Damyan',
-                'password': '$2b$12$hsm4K8BPvOHDd2YTXAgKZO4KMC9Ia2oZ8DWE3U4Vf49lXN5kk/IJq'
-            }
-        }
-    },
-    'cookie': {
-        'name': 'clscre_app',
-        'key': 'clscre_token',
-        'expiry_days': 1
-    },
-    'preauthorized': {}
-}
+config = yaml.safe_load("""
+credentials:
+  usernames:
+    trevor@clscre.com:
+      email: trevor@clscre.com
+      name: Trevor Damyan
+      password: '$2b$12$hsm4K8BPvOHDd2YTXAgKZO4KMC9Ia2oZ8DWE3U4Vf49lXN5kk/IJq'
+
+cookie:
+  name: clscre_app
+  key: clscre_token
+  expiry_days: 1
+
+preauthorized:
+  emails: []
+""")
 
 authenticator = stauth.Authenticate(
     config['credentials'],
     config['cookie']['name'],
     config['cookie']['key'],
-    config['cookie']['expiry_days']
+    config['cookie']['expiry_days'],
+    config['preauthorized']
 )
 
 name, authentication_status, username = authenticator.login("Login", "main")
