@@ -4,19 +4,32 @@ import requests
 import time
 from PIL import Image
 import streamlit_authenticator as stauth
+import yaml
+from yaml import SafeLoader
 
 # --- LOGIN SETUP ---
-names = ["Trevor Damyan"]
-usernames = ["trevor@clscre.com"]
-hashed_passwords = [
-    "$2b$12$hsm4K8BPvOHDd2YTXAgKZO4KMC9Ia2oZ8DWE3U4Vf49lXN5kk/IJq"
-]
+config = {
+    'credentials': {
+        'usernames': {
+            'trevor@clscre.com': {
+                'name': 'Trevor Damyan',
+                'password': '$2b$12$hsm4K8BPvOHDd2YTXAgKZO4KMC9Ia2oZ8DWE3U4Vf49lXN5kk/IJq'
+            }
+        }
+    },
+    'cookie': {
+        'name': 'clscre_app',
+        'key': 'clscre_token',
+        'expiry_days': 1
+    },
+    'preauthorized': {}
+}
 
 authenticator = stauth.Authenticate(
-    names,
-    usernames,
-    hashed_passwords,
-    "clscre_app", "clscre_token", cookie_expiry_days=1
+    config['credentials'],
+    config['cookie']['name'],
+    config['cookie']['key'],
+    config['cookie']['expiry_days']
 )
 
 name, authentication_status, username = authenticator.login("Login", "main")
