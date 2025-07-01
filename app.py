@@ -6,11 +6,12 @@ from PIL import Image
 import streamlit_authenticator as stauth
 import yaml
 from yaml import SafeLoader
+import io
 
 # --- SETUP PAGE AND LOGO EARLY ---
-st.set_page_config(page_title="CLS CRE Phone Enrichment", layout="wide")
+st.set_page_config(page_title="CLS CRE Phone Enrichment", layout="centered")
 logo_path = "https://clscre.com/wp-content/uploads/2023/05/CLS-CRE_logo_white.png"
-st.image(logo_path, width=200)
+st.image(logo_path, width=400)
 st.markdown("### Phone Number Cleaner - Numverify")
 
 # --- LOGIN SETUP ---
@@ -27,20 +28,13 @@ cookie:
   key: clscre_token
   expiry_days: 1
 """)
-
 authenticator = stauth.Authenticate(
     config['credentials'],
     config['cookie']['name'],
     config['cookie']['key'],
     config['cookie']['expiry_days']
 )
-
 authenticator.login()
-
-# Debug info
-st.sidebar.markdown("### 🔐 Debug Info")
-st.sidebar.write("Auth Status (from session):", st.session_state.get("authentication_status"))
-st.sidebar.write("Session State:", dict(st.session_state))
 
 auth_status = st.session_state.get("authentication_status")
 
@@ -52,7 +46,6 @@ elif auth_status:
     authenticator.logout("Logout", "sidebar")
     username = st.session_state.get("username", "Unknown User")
     st.success(f"Welcome, {username}!")
-    st.write("✅ Upload section loaded.")
 
     # --- MAIN APP ---
     API_KEY = st.secrets["NUMVERIFY_API_KEY"]
@@ -85,7 +78,6 @@ elif auth_status:
                 'Line Type': line_type,
                 'Carrier': data.get('carrier'),
                 'Location': data.get('location'),
-                'International Format': data.get('international_format'),
                 'Working Score': working_score
             }
         except Exception as e:
@@ -111,22 +103,32 @@ elif auth_status:
             raw_phones = df[phone_columns].values.flatten()
             normalized = pd.Series(raw_phones).dropna().map(normalize_phone_number).dropna().drop_duplicates()
 
-            st.write(f"Processing {len(normalized)} unique phone numbers...")
-
             enriched_data = []
             progress = st.progress(0)
             for i, phone in enumerate(normalized):
                 enriched_data.append(enrich_number(phone))
                 progress.progress((i + 1) / len(normalized))
                 time.sleep(1)
+            progress.empty()
 
             result_df = pd.DataFrame(enriched_data)
             st.dataframe(result_df)
 
-            csv = result_df.to_csv(index=False).encode('utf-8')
+            # Save output to 2nd sheet of original Excel
+            output = io.BytesIO()
+            if uploaded_file.name.endswith(".csv"):
+                df.to_excel(output, index=False, sheet_name="Original")
+            else:
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    df.to_excel(writer, index=False, sheet_name="Original")
+                    result_df.to_excel(writer, index=False, sheet_name="Cleaned")
+            output.seek(0)
+
             st.download_button(
-                label="📥 Download Enriched Results as CSV",
-                data=csv,
-                file_name="enriched_phone_numbers.csv",
-                mime='text/csv'
+                label="📥 Download Excel with Cleaned Results (Sheet 2)",
+                data=output,
+                file_name="phone_enrichment_output.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
+
+            st.stop()
