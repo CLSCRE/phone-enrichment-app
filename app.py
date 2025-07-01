@@ -6,6 +6,8 @@ from PIL import Image
 import streamlit_authenticator as stauth
 import yaml
 from yaml import SafeLoader
+import openpyxl
+from openpyxl.styles import Font
 import io
 
 # --- SETUP PAGE AND LOGO EARLY ---
@@ -83,7 +85,7 @@ elif auth_status:
         except Exception as e:
             return {'Phone': phone, 'Error': str(e)}
 
-    st.title("📞 Phone Number Enrichment Tool")
+    st.markdown("#### Phone Number Enrichment Tool")
     st.caption("Upload a spreadsheet of phone numbers to identify type and working probability using Numverify.")
 
     uploaded_file = st.file_uploader("Upload Excel or CSV File", type=["xlsx", "xls", "csv"])
@@ -112,23 +114,32 @@ elif auth_status:
             progress.empty()
 
             result_df = pd.DataFrame(enriched_data)
-            st.dataframe(result_df)
 
-            # Save output to 2nd sheet of original Excel
+            # Filter out invalid numbers from original
+            valid_phones = result_df[result_df["Valid"] == True]["Phone"].astype(str)
+            filtered_df = df[df[phone_columns[0]].astype(str).str.replace(r'\D', '', regex=True).isin(valid_phones)]
+
+            # Save to Excel with formatting
             output = io.BytesIO()
-            if uploaded_file.name.endswith(".csv"):
-                df.to_excel(output, index=False, sheet_name="Original")
-            else:
-                with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    df.to_excel(writer, index=False, sheet_name="Original")
-                    result_df.to_excel(writer, index=False, sheet_name="Cleaned")
-            output.seek(0)
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                filtered_df.to_excel(writer, index=False, sheet_name="Original")
+                result_df.to_excel(writer, index=False, sheet_name="Cleaned")
 
+                # Apply green font to mobile rows in Original
+                workbook = writer.book
+                sheet = workbook["Original"]
+                for i, phone in enumerate(filtered_df[phone_columns[0]].astype(str), start=2):
+                    clean_phone = ''.join(filter(str.isdigit, str(phone)))
+                    match = result_df[result_df["Phone"] == clean_phone]
+                    if not match.empty and match.iloc[0]["Line Type"] == "mobile":
+                        for cell in sheet[i]:
+                            cell.font = Font(color="008000")  # Green
+
+            output.seek(0)
             st.download_button(
                 label="📥 Download Excel with Cleaned Results (Sheet 2)",
                 data=output,
                 file_name="phone_enrichment_output.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
-
             st.stop()
